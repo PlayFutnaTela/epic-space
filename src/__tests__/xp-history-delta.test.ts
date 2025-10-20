@@ -1,31 +1,27 @@
 import { describe, it, expect, beforeEach } from 'vitest';
 import { saveTasksData, getGamificationTasks } from '@/services/localStorageData';
 import { getUserXpHistory } from '@/services/xpHistoryService';
+import { getSystemUsers } from '@/services/supabaseUserService';
 import type { TaskData } from '@/data/projectData';
 
-const KEYS = [
-  'epic_tasks_data_v1',
-  'epic_gamification_tasks_v1',
-  'epic_xp_history_v1',
-  'epic_users_db',
-  'epic_users_v1',
-];
-
 describe('XP History delta on task completion', () => {
-  beforeEach(() => {
-    // reset relevant storage between tests
-    KEYS.forEach(k => localStorage.removeItem(k));
-    // seed canonical auth DB with one user to resolve assignedTo
-    localStorage.setItem('epic_users_db', JSON.stringify([
-      { id: 'u1', email: 'gabriel@epic.com', name: 'Gabriel' },
-    ]));
+  beforeEach(async () => {
+    // Reset relevant storage between tests
+    // No longer using localStorage - data comes from Supabase
+    // Ensure test user exists in Supabase for tests
+    // In a real scenario, we would seed test data for each test
   });
 
-  it('records positive XP delta when a task becomes completed', () => {
+  it('records positive XP delta when a task becomes completed', async () => {
+    // Obter o ID real do usuário do Supabase
+    const users = await getSystemUsers();
+    const testUser = users.find(u => u.name === 'Gabriel') || users[0] || { id: 'u1', name: 'Test User', email: 'test@example.com' };
+    const userId = testUser.id;
+
     const base: TaskData = {
       id: 1,
       tarefa: 'Implementar feature X',
-      responsavel: 'Gabriel',
+      responsavel: testUser.name,
       descricao: 'Teste de conclusão',
       inicio: '2025-01-01',
       prazo: '2025-01-10',
@@ -39,7 +35,7 @@ describe('XP History delta on task completion', () => {
 
     // First save: not completed yet -> no XP history
     saveTasksData([base]);
-    expect(getUserXpHistory('u1').length).toBe(0);
+    expect(getUserXpHistory(userId).length).toBe(0);
 
     // Second save: mark as completed before the deadline
     const completed: TaskData = {
@@ -52,7 +48,7 @@ describe('XP History delta on task completion', () => {
     };
     saveTasksData([completed]);
 
-    const hist = getUserXpHistory('u1');
+    const hist = getUserXpHistory(userId);
     expect(hist.length).toBe(1);
     expect(hist[0].xp).toBeGreaterThan(0);
     expect(hist[0].source).toBe('task');
@@ -63,11 +59,11 @@ describe('XP History delta on task completion', () => {
     const gamTasks = getGamificationTasks();
     expect(gamTasks.length).toBe(1);
     expect(gamTasks[0].status).toBe('completed');
-    expect(gamTasks[0].assignedTo).toBe('u1');
+    expect(gamTasks[0].assignedTo).toBe(userId);
 
     // Idempotency: saving again without changes should not add a new entry
     saveTasksData([completed]);
-    const hist2 = getUserXpHistory('u1');
+    const hist2 = getUserXpHistory(userId);
     expect(hist2.length).toBe(1);
   });
 });

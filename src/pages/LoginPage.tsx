@@ -62,16 +62,6 @@ const LoginPage: React.FC = () => {
             <CardDescription className="text-muted-foreground">
               Faça login para acessar sua conta
             </CardDescription>
-            
-            {/* Credenciais de teste */}
-            <div className="text-xs bg-muted/50 p-3 rounded-md border border-border/30">
-              <p className="font-medium text-muted-foreground mb-2">Credenciais de teste:</p>
-              <div className="space-y-1">
-                <p><span className="font-mono">admin@epic.com</span> / <span className="font-mono">123456</span></p>
-                <p><span className="font-mono">user@epic.com</span> / <span className="font-mono">123456</span></p>
-                <p><span className="font-mono">gabriel@epic.com</span> / <span className="font-mono">123456</span></p>
-              </div>
-            </div>
           </CardHeader>
           
           <form onSubmit={handleLogin}>

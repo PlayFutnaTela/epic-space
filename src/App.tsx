@@ -5,6 +5,7 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { BrowserRouter, Routes, Route } from "react-router-dom";
 import { AuthProvider, useAuth } from "@/contexts/AuthContext";
 import ProtectedRoute from "@/components/ProtectedRoute";
+import ErrorBoundary from "@/components/ErrorBoundary";
 import { getUserDisplayName } from "@/utils/userSync";
 import Navigation from "./components/Navigation";
 import {
@@ -136,12 +137,14 @@ const App = () => (
       <AuthProvider>
         <Toaster />
         <Sonner />
-        <BrowserRouter
-        future={{
-          v7_startTransition: true,
-          v7_relativeSplatPath: true
-        }}
-      >
+        {/* ✅ Error Boundary para capturar erros não esperados */}
+        <ErrorBoundary>
+          <BrowserRouter
+          future={{
+            v7_startTransition: true,
+            v7_relativeSplatPath: true
+          }}
+        >
         <Routes>
           {/* Rota de login sem layout (sem sidebar e header) */}
           <Route path="/login" element={<LoginPage />} />
@@ -185,6 +188,7 @@ const App = () => (
           } />
         </Routes>
       </BrowserRouter>
+        </ErrorBoundary>
       </AuthProvider>
     </TooltipProvider>
   </QueryClientProvider>

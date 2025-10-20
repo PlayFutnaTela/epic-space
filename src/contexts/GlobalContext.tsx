@@ -9,7 +9,7 @@ import React, { createContext, useContext, useEffect, useState } from 'react';
 import { useAppState } from '@/services/appStateManager';
 import { DataProvider } from '@/contexts/DataContext';
 import { TaskData } from '@/data/projectData';
-import { getTasksData } from '@/services/localStorageData';
+import { getTasksData } from '@/services/supabaseDataService';
 import { useToast } from '@/hooks/use-toast';
 
 interface GlobalContextValue {

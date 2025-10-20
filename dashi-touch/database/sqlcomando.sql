@@ -18,7 +18,8 @@ CREATE TABLE users (
     updated_at TIMESTAMPTZ DEFAULT NOW(),
     timezone TEXT DEFAULT 'UTC',
     language_preference TEXT DEFAULT 'pt-BR',
-    theme_preference TEXT DEFAULT 'light'
+    theme_preference TEXT DEFAULT 'light',
+    role TEXT DEFAULT 'user' CHECK (role IN ('user', 'admin', 'dev'))
 );
 
 -- Tabela de projetos
@@ -480,6 +481,17 @@ CREATE TABLE analytics_preferences (
     updated_at TIMESTAMPTZ DEFAULT NOW()
 );
 
+-- Configurações globais de gamificação
+CREATE TABLE gamification_config (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    config_key TEXT UNIQUE NOT NULL,
+    config_value JSONB NOT NULL,
+    description TEXT,
+    is_active BOOLEAN DEFAULT true,
+    created_at TIMESTAMPTZ DEFAULT NOW(),
+    updated_at TIMESTAMPTZ DEFAULT NOW()
+);
+
 -- Filtros de tarefas
 CREATE TABLE task_filters (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
@@ -678,6 +690,10 @@ CREATE INDEX idx_tasks_status_assigned ON tasks(status, assigned_to);
 CREATE INDEX idx_tasks_deadline_status ON tasks(deadline, status);
 CREATE INDEX idx_player_productivity_user_season ON player_productivity_metrics(user_id, season_name);
 
+-- Índice para configurações de gamificação
+CREATE INDEX idx_gamification_config_key ON gamification_config(config_key);
+CREATE INDEX idx_gamification_config_active ON gamification_config(is_active);
+
 -- ============================================================================
 -- TRIGGERS PARA ATUALIZAÇÃO AUTOMÁTICA
 -- ============================================================================
@@ -704,6 +720,7 @@ CREATE TRIGGER update_chart_configurations_updated_at BEFORE UPDATE ON chart_con
 CREATE TRIGGER update_analytics_preferences_updated_at BEFORE UPDATE ON analytics_preferences FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
 CREATE TRIGGER update_task_filters_updated_at BEFORE UPDATE ON task_filters FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
 CREATE TRIGGER update_dashboard_widgets_updated_at BEFORE UPDATE ON dashboard_widgets FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
+CREATE TRIGGER update_gamification_config_updated_at BEFORE UPDATE ON gamification_config FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
 CREATE TRIGGER update_task_comments_updated_at BEFORE UPDATE ON task_comments FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
 
 -- ============================================================================
@@ -730,6 +747,7 @@ ALTER TABLE analytics_preferences ENABLE ROW LEVEL SECURITY;
 ALTER TABLE chart_configurations ENABLE ROW LEVEL SECURITY;
 ALTER TABLE task_filters ENABLE ROW LEVEL SECURITY;
 ALTER TABLE dashboard_widgets ENABLE ROW LEVEL SECURITY;
+ALTER TABLE gamification_config ENABLE ROW LEVEL SECURITY;
 
 -- Políticas básicas para usuários (podem acessar apenas seus próprios dados)
 CREATE POLICY "Users can view own profile" ON users FOR SELECT USING (auth.uid() = id);
@@ -758,6 +776,16 @@ CREATE POLICY "Users can manage own chart configurations" ON chart_configuration
 CREATE POLICY "Users can manage own task filters" ON task_filters FOR ALL USING (auth.uid() = user_id);
 CREATE POLICY "Users can manage own dashboard widgets" ON dashboard_widgets FOR ALL USING (auth.uid() = user_id);
 
+-- Políticas para configurações globais (visíveis para todos autenticados)
+CREATE POLICY "Gamification config is viewable by authenticated users" ON gamification_config FOR SELECT TO authenticated USING (true);
+CREATE POLICY "Only admins can modify gamification config" ON gamification_config FOR ALL TO authenticated USING (
+  EXISTS (
+    SELECT 1 FROM users 
+    WHERE id = auth.uid() 
+    AND role IN ('admin', 'dev')
+  )
+);
+
 -- Políticas para rankings (visíveis para todos)
 CREATE POLICY "Rankings are publicly viewable" ON user_rankings FOR SELECT TO authenticated USING (true);
 CREATE POLICY "Ranking history is publicly viewable" ON ranking_history FOR SELECT TO authenticated USING (true);
@@ -773,6 +801,13 @@ CREATE POLICY "Seasons are publicly viewable" ON player_seasons FOR SELECT TO au
 INSERT INTO player_seasons (name, start_date, end_date, is_active) 
 VALUES ('Temporada Atual', CURRENT_DATE, CURRENT_DATE + INTERVAL '6 months', true);
 
+-- Inserir configurações padrão de gamificação
+INSERT INTO gamification_config (config_key, config_value, description) VALUES
+('productivity_percentages', '{"early": 110, "on_time": 100, "late": 50, "refacao": 40}', 'Percentuais de produtividade por classificação de entrega'),
+('xp_base_values', '{"task_completion": 100, "mission_completion": 500, "streak_bonus": 50}', 'Valores base de XP para diferentes ações'),
+('streak_multipliers', '{"daily": 1.1, "weekly": 1.5, "monthly": 2.0}', 'Multiplicadores de XP para streaks'),
+('level_thresholds', '{"base_xp": 1000, "multiplier": 1.5}', 'Limites de XP para subir de nível');
+
 -- ============================================================================
 -- COMENTÁRIOS NAS TABELAS
 -- ============================================================================
@@ -785,6 +820,7 @@ COMMENT ON TABLE user_rankings IS 'Rankings dos usuários baseados em XP';
 COMMENT ON TABLE analytics_cache IS 'Cache para dados analíticos pesados';
 COMMENT ON TABLE dashboard_metrics IS 'Métricas calculadas para o dashboard';
 COMMENT ON TABLE kpi_calculations IS 'Cálculos de KPIs do sistema';
+COMMENT ON TABLE gamification_config IS 'Configurações globais do sistema de gamificação';
 
 -- Verificar se todas as tabelas foram criadas
 SELECT schemaname, tablename 

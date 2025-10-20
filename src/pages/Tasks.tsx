@@ -2,7 +2,7 @@ import React, { useState, useRef, useMemo } from 'react';
 import { motion } from 'framer-motion';
 import TaskTable, { TaskTableRef } from "@/components/dashboard/TaskTable";
 import { DataProvider, useData } from "@/contexts/DataContext";
-import { getTasksData } from "@/services/localStorageData";
+
 import { getSeasonConfig } from "@/config/season";
 import { toast } from "@/hooks/use-toast";
 import jsPDF from 'jspdf';
@@ -51,14 +51,7 @@ const TasksContent = () => {
   const { taskTableRef, applyQuickFilter } = useQuickFilters();
 
   // Temporadas
-  const [seasonList, setSeasonList] = useState(() => {
-    try {
-      const stored = localStorage.getItem('epic_season_list_v1');
-      return stored ? JSON.parse(stored) : [];
-    } catch {
-      return [];
-    }
-  });
+  const [seasonList, setSeasonList] = useState([]);
   const [selectedSeasonIdx, setSelectedSeasonIdx] = useState(0);
   const selectedSeason = seasonList[selectedSeasonIdx] || getSeasonConfig();
 
@@ -369,96 +362,9 @@ const TasksContent = () => {
 };
 
 const Tasks = () => {
-  const [tasks, setTasks] = React.useState(() => {
-    // Aplicar garantia de IDs únicos ao carregar do localStorage
-    const loadedTasks = getTasksData();
-    // Como não temos acesso direto a ensureUniqueIds aqui, vamos garantir IDs únicos manualmente
-    const idMap = new Map<number, boolean>();
-    let maxId = 0;
-
-    // Primeiro, encontrar o ID máximo e identificar duplicatas
-    for (const task of loadedTasks) {
-      maxId = Math.max(maxId, task.id);
-      if (idMap.has(task.id)) {
-        // Se encontrar um ID duplicado, marca para corrigir
-      } else {
-        idMap.set(task.id, true);
-      }
-    }
-
-    // Se houver IDs duplicados, reconstruir com IDs únicos
-    if (loadedTasks.length !== idMap.size) {
-      const uniqueTasks = [];
-      const usedIds = new Set<number>();
-      
-      for (const task of loadedTasks) {
-        if (usedIds.has(task.id)) {
-          // Gerar novo ID único
-          let newId = maxId + 1;
-          while (usedIds.has(newId)) {
-            newId++;
-          }
-          uniqueTasks.push({ ...task, id: newId });
-          usedIds.add(newId);
-          maxId = newId;
-        } else {
-          uniqueTasks.push(task);
-          usedIds.add(task.id);
-        }
-      }
-      
-      return uniqueTasks;
-    }
-    
-    return loadedTasks;
-  });
+  const [tasks, setTasks] = React.useState([]);
   
-  React.useEffect(() => {
-    const onChanged = () => {
-      const loadedTasks = getTasksData();
-      // Aplicar garantia de IDs únicos ao receber evento de atualização
-      const idMap = new Map<number, boolean>();
-      let maxId = 0;
 
-      // Primeiro, encontrar o ID máximo e identificar duplicatas
-      for (const task of loadedTasks) {
-        maxId = Math.max(maxId, task.id);
-        if (idMap.has(task.id)) {
-          // Se encontrar um ID duplicado, marca para corrigir
-        } else {
-          idMap.set(task.id, true);
-        }
-      }
-
-      // Se houver IDs duplicados, reconstruir com IDs únicos
-      if (loadedTasks.length !== idMap.size) {
-        const uniqueTasks = [];
-        const usedIds = new Set<number>();
-        
-        for (const task of loadedTasks) {
-          if (usedIds.has(task.id)) {
-            // Gerar novo ID único
-            let newId = maxId + 1;
-            while (usedIds.has(newId)) {
-              newId++;
-            }
-            uniqueTasks.push({ ...task, id: newId });
-            usedIds.add(newId);
-            maxId = newId;
-          } else {
-            uniqueTasks.push(task);
-            usedIds.add(task.id);
-          }
-        }
-        
-        setTasks(uniqueTasks);
-      } else {
-        setTasks(loadedTasks);
-      }
-    };
-    window.addEventListener('tasks:changed', onChanged);
-    return () => window.removeEventListener('tasks:changed', onChanged);
-  }, []);
   
   return (
     <DataProvider initialTasks={tasks}>

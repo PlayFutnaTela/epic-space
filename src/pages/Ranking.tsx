@@ -33,8 +33,7 @@ import {
 } from '@/services/missionService';
 import { useAuth } from '@/contexts/AuthContext';
 import { useToast } from '@/hooks/use-toast';
-// Usando localStorage para persistência dos dados
-import { fetchRanking } from '@/services/localStorageData';
+
 import { getUserXpHistory } from '@/services/xpHistoryService';
 
 // Tipos para o sistema de gameficação
@@ -93,15 +92,8 @@ const RankingPage: React.FC = () => {
   const [recentTasks, setRecentTasks] = useState<Task[]>([]);
 
   // Temporadas: lista e seleção
-  const [seasonList, setSeasonList] = useState(() => {
-    try {
-      const stored = localStorage.getItem('epic_season_list_v1');
-      return stored ? JSON.parse(stored) : [];
-    } catch {
-      // Erros de parsing são tratados retornando listas vazias
-    }
-  });
-  const [selectedSeasonIdx, setSelectedSeasonIdx] = useState<number>(seasonList.length - 1);
+  const [seasonList, setSeasonList] = useState<any[]>([]);
+  const [selectedSeasonIdx, setSelectedSeasonIdx] = useState<number>(-1);
 
   // Função auxiliar para calcular o rankingData
   const calculateRankingData = useCallback(() => {
@@ -129,13 +121,18 @@ const RankingPage: React.FC = () => {
 
   // Atualiza lista de temporadas ao montar
   useEffect(() => {
-    try {
-      const stored = localStorage.getItem('epic_season_list_v1');
-      setSeasonList(stored ? JSON.parse(stored) : []);
-      setSelectedSeasonIdx(stored ? JSON.parse(stored).length - 1 : -1);
-    } catch {
-      // Erros de parsing são tratados retornando listas vazias
-    }
+    // Buscar temporadas do Supabase
+    fetch('http://localhost:3001/api/seasons')
+      .then(res => res.json())
+      .then(seasons => {
+        setSeasonList(seasons);
+        setSelectedSeasonIdx(seasons.length > 0 ? seasons.length - 1 : -1);
+      })
+      .catch(() => {
+        // Caso não consiga buscar do backend, inicializa com lista vazia
+        setSeasonList([]);
+        setSelectedSeasonIdx(-1);
+      });
   }, []);
 
   // Temporada selecionada
@@ -160,34 +157,25 @@ const RankingPage: React.FC = () => {
   // Função para atualizar os dados do ranking
   const updateRankingData = useCallback(() => {
     setIsLoading(true);
-    // Primeiro tenta backend real
+    // Busca dados do ranking via backend Supabase
     fetch('http://localhost:3001/api/ranking')
       .then(r => r.json())
       .then((dto: UserRanking[]) => {
         if (Array.isArray(dto) && dto.length) {
           setAllUsers(dto.map(u => ({ ...u, position: 0 })) as unknown as UserRanking[]);
           setLastUpdated(new Date().toLocaleTimeString('pt-BR'));
-          setIsLoading(false);
-          return;
+        } else {
+          // Caso não haja dados no backend, inicializa com array vazio
+          setAllUsers([]);
         }
-        throw new Error('empty');
       })
       .catch(() => {
-        // Busca dados do ranking via localStorage
-        fetchRanking()
-          .then(dto => {
-            setAllUsers(dto.map(u => ({ ...u, position: 0 })) as unknown as UserRanking[]);
-          })
-          .catch(() => {
-            // Fallback caso haja algum problema com o localStorage
-            // Usando array vazio como fallback seguro, já que updateRanking pode lidar com array vazio
-            const updatedUsers = updateRanking([], recentTasks);
-            setAllUsers(updatedUsers as unknown as UserRanking[]);
-          })
-          .finally(() => {
-            setLastUpdated(new Date().toLocaleTimeString('pt-BR'));
-            setIsLoading(false);
-          });
+        // Em caso de erro, inicializa com array vazio
+        setAllUsers([]);
+        console.error('Erro ao buscar dados do ranking');
+      })
+      .finally(() => {
+        setIsLoading(false);
       });
   }, [recentTasks]);
 
@@ -222,7 +210,7 @@ const RankingPage: React.FC = () => {
     };
   }, [updateRankingData]);
 
-  // Reagir imediatamente a alterações de tarefas (salvas no localStorage)
+  // Reagir imediatamente a alterações de tarefas
   useEffect(() => {
     const onTasksChanged = () => updateRankingData();
     window.addEventListener('tasks:changed', onTasksChanged);
@@ -602,7 +590,9 @@ const RankingPage: React.FC = () => {
             <DialogHeader>
               <DialogTitle className="flex items-center gap-3 text-foreground">
                 <Avatar className="h-12 w-12">
-                  <AvatarImage src={selectedUser.userId.includes('1') ? '/avatars/user1.png' : selectedUser.userId.includes('2') ? '/avatars/user2.png' : '/avatars/user3.png'} />
+                  {selectedUser.userId && (
+                    <AvatarImage src={selectedUser.userId} alt={selectedUser.userName} />
+                  )}
                   <AvatarFallback className="bg-accent">
                     <User className="h-6 w-6 text-primary" />
                   </AvatarFallback>

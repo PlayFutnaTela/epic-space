@@ -1,0 +1,59 @@
+FAÇA UMA VARREDURA DETALHADA E PRECISA NO SISTEMA, ENCONTRE QUALQUER UTILIZAÇÃO DE DADOS EM LOCALSTORAGE QUE DEVERIA ESTAR SENDO SUBSTITUÍDA POR RECURSO DE BANCO DE DADOS(SUPABASE). FAÇA ESSA ANÁLISE MINUNCIOSA EM PÁGINA POR PÁGINA, A COMEÇAR PELA PÁGINA /ranking,. POR HORA APENAS FAÇA A ANÁLISE E ME INFORME O QUE DEVERÁ SER FEITO PARA CORRIGIR DE MANEIRA PROFISIONAÇ E SEGURA. SEMPRE ME RESPONDA E COMENTE EM PT-BR.
+
+Faça do seu relatório um TODO e siga-o para arrumar tudo isso. Preciso que os dados que vierem para a página /RANKING sejam todos do banco de dados, de suas tabelas corretas no SUPABASE. Implemente essa correção de forma profissional, segura, faça com que funcione perfeitamente, não deixando erro algum no console.
+
+----------------
+
+CERTIFIQUE-SE DE QUE O SISTEMA DE LOGIN ESTEJA FUNCIONANDO CONFORME EXPLICAÇÃO ABAIXO:
+
+
+O sistema de login do projeto utiliza o Supabase para autenticação e persistência de dados dos usuários. O fluxo correto é:
+
+
+Registro (Signup):
+
+
+O usuário se registra usando email e senha.
+O Supabase Auth cria um novo registro na tabela interna de autenticação.
+Um trigger no Supabase automaticamente cria um perfil na tabela player_profiles e uma entrada na tabela user_rankings para o novo usuário, usando o user_id gerado pelo Auth.
+Login:
+
+
+O usuário faz login com email e senha.
+O sistema autentica via Supabase Auth.
+Após o login, o frontend pode buscar dados adicionais do usuário nas tabelas:
+player_profiles (informações do perfil, como nickname, avatar, etc.)
+user_rankings (ranking, pontuação, etc.)
+Outras tabelas relacionadas, usando o user_id como chave.
+Persistência de Tarefas:
+
+
+Tarefas criadas/atualizadas são salvas na tabela tasks (ou equivalente), com o campo user_id para associar cada tarefa ao usuário correto.
+Tabelas envolvidas:
+
+
+users (Supabase Auth interna, não diretamente acessível)
+player_profiles (perfil do usuário, criado por trigger)
+user_rankings (ranking do usuário, criado por trigger)
+tasks (tarefas do usuário, associadas por user_id)
+Resumo:
+O frontend só precisa lidar com o registro/login via Supabase Auth. Perfis e rankings são criados automaticamente por triggers no banco. Todas as operações de dados usam o user_id para garantir associação correta entre usuário e dados.
+
+
+
+---------------------
+
+
+Sempre comente e responda em PT-BR. Certifique-se de que a página /a esteja trabalhando com os dados corretos das tabelas do banco de dados, certifique-se que de esteja trazendo as informações do SUPABASE, as informações necessárias para que essa página funcione. Caso não esteja CORRIJA DE FORMA PROFISSIONAL, sem danificar nem causar problemas nosistema de nenhuma maneira.
+
+
+----------------------
+
+
+BANCO DE DADOS DA PÁGINA /PROFILE/COURRENT:
+
+A página /profile/current precisa da mesma atneção: CERTIFIQUE-SE DE QUE OS DADOS QUE NELA CONTEM SÃO DO BANCO DE DADOS. Certifique-se de que as informações venham das tabelas corretas. Certifique-se de que as opções de 'Editar Perfil'(um modal que se abre ao clicar no botão 'Editar Perfil') tenha a função de salvar/editar/apagar dados da tabela de perfil de usuário FUNCIONANDO EM SUA TOTALIDADE. Analize novamente a página /profile/courrent E CERTIFIQUE-SE DE QUE A PÁGINA ESTÁ EM PLENO FUNCIONAMENTO, COM TODAS AS SUAS OPÇÕES FUNCIONANDO BEM.
+
+
+
+----------------------

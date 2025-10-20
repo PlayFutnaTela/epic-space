@@ -1,14 +1,16 @@
 // src/config/season.ts
 // Configuração de Temporadas (Nome, Descrição, Período)
 
+import { supabase } from '@/lib/supabase';
+
 export type SeasonConfig = {
   name: string;
-  description?: string;
+  description: string;
   startIso: string; // ISO string (inclusive)
   endIso: string;   // ISO string (inclusive)
 };
 
-const LS_KEY = 'epic_season_config_v1';
+const SEASON_TABLE = 'season_config';
 
 function startOfCurrentMonth(): Date {
   const d = new Date();
@@ -38,33 +40,60 @@ function isValidSeason(cfg: SeasonConfig): boolean {
   return Number.isFinite(s) && Number.isFinite(e) && s <= e;
 }
 
-export function getSeasonConfig(): SeasonConfig {
+export async function getSeasonConfig(): Promise<SeasonConfig> {
   try {
-    const raw = localStorage.getItem(LS_KEY);
-    if (!raw) return getDefaultSeason();
-    const parsed = JSON.parse(raw);
-    const merged: SeasonConfig = {
-      name: parsed?.name ?? '',
-      description: parsed?.description ?? '',
-      startIso: parsed?.startIso ?? '',
-      endIso: parsed?.endIso ?? '',
+    const { data, error } = await supabase
+      .from(SEASON_TABLE)
+      .select('*')
+      .single();
+    
+    if (error) {
+      console.warn('Erro ao carregar configuração de temporada, usando padrões:', error);
+      return getDefaultSeason();
+    }
+    
+    if (!data) {
+      // Configuração não encontrada, retornar padrões
+      return getDefaultSeason();
+    }
+    
+    const config: SeasonConfig = {
+      name: data.name,
+      description: data.description,
+      startIso: data.startIso,
+      endIso: data.endIso,
     };
-    return isValidSeason(merged) ? merged : getDefaultSeason();
-  } catch {
+    
+    return isValidSeason(config) ? config : getDefaultSeason();
+  } catch (error) {
+    console.error('Erro inesperado ao carregar configuração de temporada:', error);
     return getDefaultSeason();
   }
 }
 
-export function setSeasonConfig(cfg: SeasonConfig) {
+export async function setSeasonConfig(cfg: SeasonConfig) {
   if (!isValidSeason(cfg)) {
     throw new Error('Configuração de temporada inválida. Verifique as datas e o nome.');
   }
-  localStorage.setItem(LS_KEY, JSON.stringify(cfg));
+  
+  try {
+    const { error } = await supabase
+      .from(SEASON_TABLE)
+      .upsert({ id: 1, ...cfg }, { onConflict: 'id' }); // Assuming id=1 for the main config
+    
+    if (error) {
+      console.error('Erro ao salvar configuração de temporada:', error);
+      throw error;
+    }
+  } catch (error) {
+    console.error('Erro inesperado ao salvar configuração de temporada:', error);
+    throw error;
+  }
 }
 
-export function isInSeason(dateString?: string): boolean {
+export async function isInSeason(dateString?: string): Promise<boolean> {
   if (!dateString) return false;
-  const cfg = getSeasonConfig();
+  const cfg = await getSeasonConfig();
   const t = new Date(dateString).getTime();
   const s = new Date(cfg.startIso).getTime();
   const e = new Date(cfg.endIso).getTime();

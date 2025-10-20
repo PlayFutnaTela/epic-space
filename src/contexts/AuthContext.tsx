@@ -7,6 +7,7 @@ import React, { createContext, useContext, useEffect, useState } from 'react';
 import { authService, User, AuthResponse } from '@/services/authService';
 import { useToast } from '@/hooks/use-toast';
 import { addStreakAwardIfNeeded } from '@/config/streak';
+import { supabase } from '@/lib/supabase';
 import { addSimpleXpHistory } from '@/services/xpHistoryService';
 
 interface AuthContextValue {
@@ -14,10 +15,10 @@ interface AuthContextValue {
   isAuthenticated: boolean;
   isLoading: boolean;
   login: (email: string, password: string) => Promise<AuthResponse>;
-  logout: () => void;
+  logout: () => Promise<void>;
   register: (email: string, password: string, name: string) => Promise<AuthResponse>;
   updateProfile: (updates: Partial<User>) => Promise<AuthResponse>;
-  refreshUser: () => void;
+  refreshUser: () => Promise<void>;
 }
 
 const AuthContext = createContext<AuthContextValue | undefined>(undefined);
@@ -33,32 +34,48 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
 
   // Verifica autenticação ao carregar
   useEffect(() => {
-    const checkAuth = () => {
-      if (authService.isAuthenticated()) {
-        const currentUser = authService.getCurrentUser();
-        setUser(currentUser);
+    const checkAuth = async () => {
+      try {
+        // Verifica se o usuário está autenticado usando método síncrono
+        if (authService.isAuthenticatedSync()) {
+          // Tenta obter o usuário atual usando método síncrono
+          const currentUser = authService.getCurrentUserSync();
+          if (currentUser) {
+            setUser(currentUser);
+          }
+        }
+      } catch (error) {
+        console.error('❌ Erro ao verificar autenticação:', error);
+        // Não lança erro, apenas continua com user = null
+      } finally {
+        setIsLoading(false);
       }
-      setIsLoading(false);
     };
 
     checkAuth();
 
-    // Listener para mudanças no localStorage (para sincronizar dados entre abas)
-    const handleStorageChange = (e: StorageEvent) => {
-      if (e.key === 'epic_user_data' && e.newValue) {
-        try {
-          const updatedUser = JSON.parse(e.newValue);
-          setUser(updatedUser);
-        } catch (error) {
-          console.error('Erro ao sincronizar dados do usuário:', error);
-        }
+    // Listener para mudanças de autenticação do Supabase (para sincronizar dados entre abas)
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
+      if (event === 'SIGNED_OUT') {
+        setUser(null);
+      } else if (event === 'TOKEN_REFRESHED' && session && session.user) {
+        // Atualiza o usuário quando o token for atualizado
+        const updatedUser = {
+          id: session.user.id,
+          email: session.user.email || '',
+          name: session.user.user_metadata?.name || session.user.email || '',
+          role: session.user.user_metadata?.role || 'user',
+          firstName: session.user.user_metadata?.firstName,
+          lastName: session.user.user_metadata?.lastName,
+          position: session.user.user_metadata?.position,
+          avatar: session.user.user_metadata?.avatar
+        };
+        setUser(updatedUser);
       }
-    };
-
-    window.addEventListener('storage', handleStorageChange);
+    });
 
     return () => {
-      window.removeEventListener('storage', handleStorageChange);
+      subscription.unsubscribe();
     };
   }, []);
 
@@ -80,11 +97,11 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
 
         // Bônus diário de streak (uma vez por dia)
         try {
-          const res = addStreakAwardIfNeeded(response.user.id);
+          const res = await addStreakAwardIfNeeded(response.user.id);
           if (res.awarded && res.xp > 0) {
             // Registrar no histórico de XP
             try {
-              addSimpleXpHistory(response.user.id, res.xp, 'streak', 'Bônus diário de login (streak)');
+              await addSimpleXpHistory(response.user.id, res.xp, 'streak', 'Bônus diário de login (streak)');
             } catch {}
             toast({
               title: "🔥 Streak diário!",
@@ -121,8 +138,8 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
     }
   };
 
-  const logout = () => {
-    authService.logout();
+  const logout = async () => {
+    await authService.logout();
     setUser(null);
     toast({
       title: "Logout realizado",
@@ -216,10 +233,10 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
     }
   };
 
-  // Método para recarregar dados do usuário do localStorage
-  const refreshUser = () => {
+  // Método para recarregar dados do usuário do Supabase
+  const refreshUser = async () => {
     if (authService.isAuthenticated()) {
-      const currentUser = authService.getCurrentUser();
+      const currentUser = await authService.getCurrentUserAsync();
       setUser(currentUser);
     }
   };

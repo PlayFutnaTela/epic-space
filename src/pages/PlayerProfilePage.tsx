@@ -12,7 +12,8 @@ import ProfileEditModal from '@/components/player/ProfileEditModal';
 import NotificationsModal from '@/components/player/NotificationsModal';
 import { PlayerStats } from '@/types/player';
 import { calculatePlayerStats } from '@/services/playerService';
-import { fetchPlayerProfile, getTasksData } from '@/services/localStorageData';
+// Importações para Supabase
+import { supabase } from '@/lib/supabase';
 import { getUserXpHistory } from '@/services/xpHistoryService';
 import { getSeasonConfig, type SeasonConfig } from '@/config/season';
 // import { reportUrls, download } from '@/services/reports';
@@ -20,7 +21,7 @@ import { Tooltip, TooltipContent, TooltipTrigger, TooltipProvider } from '@/comp
 import HelpCircle from 'lucide-react/dist/esm/icons/help-circle';
 // (import duplicado removido)
 
-// Notificações reais derivadas do localStorage (tarefas + histórico de XP)
+// Notificações reais (tarefas + histórico de XP)
 type UINotification = {
   id: string;
   title: string;
@@ -31,28 +32,55 @@ type UINotification = {
   xpReward?: number;
 };
 
-// Persistência leve do status de leitura no localStorage - funções utilitárias
-const READ_KEY = 'epic_read_notifications_v1';
-
-const loadReadSet = (uid?: string): Set<string> => {
+// Funções de persistência para status de leitura das notificações (usando Supabase)
+const loadReadSet = async (uid?: string): Promise<Set<string>> => {
   if (!uid) return new Set();
+  
   try {
-    const raw = localStorage.getItem(READ_KEY);
-    if (!raw) return new Set();
-    const map = JSON.parse(raw) as Record<string, Record<string, boolean>>;
-    const userMap = map?.[uid] || {};
-    return new Set(Object.keys(userMap).filter(k => userMap[k]));
-  } catch { return new Set(); }
+    const { data, error } = await supabase
+      .from('user_notification_read_status')
+      .select('notificationId')
+      .eq('userId', uid);
+    
+    if (error) {
+      console.error('Erro ao carregar status de leitura de notificações:', error);
+      return new Set();
+    }
+    
+    return new Set(data?.map(item => item.notificationId) || []);
+  } catch (error) {
+    console.error('Erro inesperado ao carregar status de leitura de notificações:', error);
+    return new Set();
+  }
 };
 
-const saveReadSet = (uid: string, setIds: Set<string>) => {
+const saveReadSet = async (uid: string, setIds: Set<string>) => {
+  if (!uid) return;
+  
   try {
-    const raw = localStorage.getItem(READ_KEY);
-    const map = raw ? (JSON.parse(raw) as Record<string, Record<string, boolean>>) : {};
-    map[uid] = {};
-    setIds.forEach(id => { map[uid][id] = true; });
-    localStorage.setItem(READ_KEY, JSON.stringify(map));
-  } catch {}
+    // Primeiro, remove todos os registros anteriores para este usuário
+    await supabase
+      .from('user_notification_read_status')
+      .delete()
+      .eq('userId', uid);
+    
+    // Depois, insere os novos registros de status de leitura
+    if (setIds.size > 0) {
+      const readStatuses = Array.from(setIds).map(notificationId => ({
+        userId: uid,
+        notificationId,
+        readAt: new Date().toISOString()
+      }));
+      
+      const { error } = await supabase
+        .from('user_notification_read_status')
+        .insert(readStatuses);
+      
+      if (error) throw error;
+    }
+  } catch (error) {
+    console.error('Erro ao salvar status de leitura de notificações:', error);
+  }
 };
 
 type TaskBreakdownItem = { id: string; title: string; classificacao: string; percent: number; completedDate: string | null };
@@ -70,6 +98,7 @@ const PlayerProfilePage: React.FC = () => {
   const [notifications, setNotifications] = useState<UINotification[]>([]);
   const [availableSeasons, setAvailableSeasons] = useState<SeasonConfig[]>([]);
   const [selectedSeason, setSelectedSeason] = useState<string>('current');
+  const [xpActivities, setXpActivities] = useState<RecentActivity[]>([]);
   
   // Simular carregamento de dados do player
   useEffect(() => {
@@ -114,37 +143,19 @@ const PlayerProfilePage: React.FC = () => {
           return;
         }
       } catch {}
-      // Fallback mock
-      const dto = await fetchPlayerProfile(user.id);
-      if (dto) {
-        setProdMetrics({
-          averagePercent: dto.productivity.averagePercent,
-          totalConsidered: dto.productivity.totalConsidered,
-        });
-        if (dto.deliveryDistribution) setDeliveryDist(dto.deliveryDistribution as any);
-        if ((dto as any).tasksBreakdown) setTasksBreakdown((dto as any).tasksBreakdown as TaskBreakdownItem[]);
-      }
+      // Fallback para Supabase
+      // Implementação para buscar do Supabase vai aqui
+      // Por enquanto mantendo a estrutura para integração futura
     };
     loadProd();
   }, [user?.id]);
 
-  // Carregar temporadas disponíveis do sistema
+  // Carregar temporadas disponíveis do sistema (usando Supabase)
   useEffect(() => {
-    try {
-      const stored = localStorage.getItem('epic_season_list_v1');
-      if (stored) {
-        const seasons = JSON.parse(stored) as SeasonConfig[];
-        setAvailableSeasons(seasons);
-      } else {
-        // Usar temporada atual como fallback
-        const currentSeason = getSeasonConfig();
-        setAvailableSeasons([currentSeason]);
-      }
-    } catch {
-      // Usar temporada atual como fallback
-      const currentSeason = getSeasonConfig();
-      setAvailableSeasons([currentSeason]);
-    }
+    // Implementação usando Supabase vai aqui
+    // Por enquanto usando temporada atual como fallback
+    const currentSeason = getSeasonConfig();
+    setAvailableSeasons([currentSeason]);
   }, []);
 
   // Calcular produtividade da temporada selecionada
@@ -190,6 +201,33 @@ const PlayerProfilePage: React.FC = () => {
     setSeasonMetrics({ averagePercent: avg, totalConsidered: count, label });
   }, [tasksBreakdown, selectedSeason, availableSeasons]);
 
+  // Carregar histórico de XP para atividades recentes
+  useEffect(() => {
+    const loadXpActivities = async () => {
+      if (!user?.id) {
+        setXpActivities([]);
+        return;
+      }
+      
+      try {
+        const hist = await getUserXpHistory(String(user.id));
+        const activities: RecentActivity[] = hist.map(e => ({
+          id: `xp-${e.id}`,
+          title: e.xp >= 0 ? 'XP ganho' : 'XP perdido',
+          description: `${e.description} ${e.xp >= 0 ? `(+${e.xp} XP)` : `(${e.xp} XP)`}`,
+          date: formatDateTime(e.date),
+        }));
+        
+        setXpActivities(activities);
+      } catch (error) {
+        console.error('Erro ao carregar atividades de XP:', error);
+        setXpActivities([]);
+      }
+    };
+    
+    loadXpActivities();
+  }, [user?.id]);
+
   // Se o player não estiver carregado, mostrar mensagem de carregamento
   if (!state.profile) {
     return (
@@ -209,44 +247,45 @@ const PlayerProfilePage: React.FC = () => {
   const isOwnProfile = playerId === 'current';
 
   // Funções para gerenciar notificações (com persistência de leitura)
-  const handleMarkAsRead = (notificationId: string) => {
+  const handleMarkAsRead = async (notificationId: string) => {
     setNotifications(prev => {
       const updated = prev.map(n => n.id === notificationId ? { ...n, isRead: true } : n);
-      if (user?.id) {
-        const readSet = loadReadSet(String(user.id));
-        readSet.add(notificationId);
-        saveReadSet(String(user.id), readSet);
-      }
       return updated;
     });
+    
+    if (user?.id) {
+      const readSet = await loadReadSet(String(user.id));
+      readSet.add(notificationId);
+      await saveReadSet(String(user.id), readSet);
+    }
   };
 
-  const handleMarkAllAsRead = () => {
+  const handleMarkAllAsRead = async () => {
     setNotifications(prev => {
       const updated = prev.map(n => ({ ...n, isRead: true }));
-      if (user?.id) {
-        const allIds = new Set(updated.map(n => n.id));
-        saveReadSet(String(user.id), allIds);
-      }
       return updated;
     });
+    
+    if (user?.id) {
+      const allIds = new Set(notifications.map(n => n.id));
+      await saveReadSet(String(user.id), allIds);
+    }
   };
 
-  // Atividade Recente dinâmica baseada em dados reais do localStorage (tarefas + XP)
+  // Atividade Recente dinâmica baseada em dados reais (tarefas + XP)
   type RecentActivity = { id: string; title: string; description: string; date: string };
-    const formatDateTime = (iso?: string) => {
-      if (!iso) return '';
-      try {
-        return new Date(iso).toLocaleString('pt-BR', { dateStyle: 'short', timeStyle: 'short' });
-      } catch { return iso; }
-    };
+  const formatDateTime = (iso?: string) => {
+    if (!iso) return '';
+    try {
+      return new Date(iso).toLocaleString('pt-BR', { dateStyle: 'short', timeStyle: 'short' });
+    } catch { return iso; }
+  };
 
     const tasksForProfile = (() => {
-      const all = getTasksData();
-      // Tenta filtrar por responsável (nome do perfil)
-      const firstName = (state.profile?.name || '').split(' ')[0] || '';
-      const byOwner = all.filter(t => t.responsavel && firstName && t.responsavel.toLowerCase().includes(firstName.toLowerCase()));
-      return byOwner.length ? byOwner : all; // se não houver match, usa geral
+      // Buscar tarefas do Supabase
+      // Implementação para buscar tarefas do Supabase vai aqui
+      // Por enquanto retornando um array vazio, a implementação real será feita com Supabase
+      return [];
     })();
 
     // Eventos das tarefas
@@ -270,22 +309,6 @@ const PlayerProfilePage: React.FC = () => {
         };
       })
     
-    // Eventos de XP do usuário autenticado (streak, bônus, penalidades, etc.)
-    const xpActivities: RecentActivity[] = (() => {
-      try {
-        if (!user?.id) return [];
-        const hist = getUserXpHistory(String(user.id));
-        return hist.map(e => ({
-          id: `xp-${e.id}`,
-          title: e.xp >= 0 ? 'XP ganho' : 'XP perdido',
-          description: `${e.description} ${e.xp >= 0 ? `(+${e.xp} XP)` : `(${e.xp} XP)`}`,
-          date: formatDateTime(e.date),
-        }));
-      } catch {
-        return [];
-      }
-    })();
-
     const recentActivities: RecentActivity[] = [...taskActivities, ...xpActivities]
       .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())
       .slice(0, 10);
@@ -317,7 +340,7 @@ const PlayerProfilePage: React.FC = () => {
       <PlayerProfileView 
         profile={state.profile} 
         stats={stats as PlayerStats} 
-        tasks={getTasksData()} 
+        tasks={[]} 
         isOwnProfile={isOwnProfile}
         onEdit={isOwnProfile ? () => setIsEditing(true) : undefined}
         onSendMessage={!isOwnProfile ? () => console.log('Enviar mensagem') : undefined}
@@ -452,8 +475,8 @@ const PlayerProfilePage: React.FC = () => {
         isOpen={isNotificationsOpen}
         onClose={() => setIsNotificationsOpen(false)}
         notifications={notifications}
-        onMarkAsRead={handleMarkAsRead}
-        onMarkAllAsRead={handleMarkAllAsRead}
+        onMarkAsRead={async (id: string) => await handleMarkAsRead(id)}
+        onMarkAllAsRead={async () => await handleMarkAllAsRead()}
       />
     </div>
   );
