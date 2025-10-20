@@ -146,11 +146,11 @@ const App = () => (
           }}
         >
         <Routes>
-          {/* Rota de login sem layout (sem sidebar e header) */}
+          {/* Rota de login sem proteção */}
           <Route path="/login" element={<LoginPage />} />
-          
-          {/* Todas as outras rotas com layout principal - Protegidas */}
-          <Route path="/*" element={
+
+          {/* Todas as outras rotas são protegidas */}
+          <Route path="/" element={
             <ProtectedRoute>
               <div className="min-h-screen bg-background">
                 <CustomSidebar>

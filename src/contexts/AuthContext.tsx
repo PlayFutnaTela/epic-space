@@ -34,33 +34,53 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
 
   // Verifica autenticação ao carregar
   useEffect(() => {
+    let mounted = true;
+
     const checkAuth = async () => {
       try {
-        // Verifica se o usuário está autenticado usando método síncrono
-        if (authService.isAuthenticatedSync()) {
-          // Tenta obter o usuário atual usando método síncrono
-          const currentUser = authService.getCurrentUserSync();
-          if (currentUser) {
-            setUser(currentUser);
-          }
+        // Primeiro tenta obter a sessão diretamente do Supabase
+        const { data: { session }, error } = await supabase.auth.getSession();
+
+        if (session?.user && mounted) {
+          // Usuário autenticado - configura o estado
+          const user = {
+            id: session.user.id,
+            email: session.user.email || '',
+            name: session.user.user_metadata?.name || session.user.email || '',
+            role: session.user.user_metadata?.role || 'user',
+            firstName: session.user.user_metadata?.firstName,
+            lastName: session.user.user_metadata?.lastName,
+            position: session.user.user_metadata?.position,
+            avatar: session.user.user_metadata?.avatar
+          };
+          setUser(user);
+        } else if (mounted) {
+          // Não há sessão válida
+          setUser(null);
         }
       } catch (error) {
         console.error('❌ Erro ao verificar autenticação:', error);
-        // Não lança erro, apenas continua com user = null
+        if (mounted) {
+          setUser(null);
+        }
       } finally {
-        setIsLoading(false);
+        if (mounted) {
+          setIsLoading(false);
+        }
       }
     };
 
     checkAuth();
 
-    // Listener para mudanças de autenticação do Supabase (para sincronizar dados entre abas)
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
-      if (event === 'SIGNED_OUT') {
-        setUser(null);
-      } else if (event === 'TOKEN_REFRESHED' && session && session.user) {
-        // Atualiza o usuário quando o token for atualizado
-        const updatedUser = {
+    // Listener para mudanças de autenticação do Supabase
+    const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
+      console.log('🔄 Auth state change:', event, session?.user?.id);
+
+      if (!mounted) return;
+
+      if (event === 'SIGNED_IN' && session?.user) {
+        // Usuário fez login
+        const user = {
           id: session.user.id,
           email: session.user.email || '',
           name: session.user.user_metadata?.name || session.user.email || '',
@@ -70,11 +90,30 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
           position: session.user.user_metadata?.position,
           avatar: session.user.user_metadata?.avatar
         };
-        setUser(updatedUser);
+        setUser(user);
+        setIsLoading(false);
+      } else if (event === 'SIGNED_OUT' || event === 'TOKEN_REFRESHED' && !session) {
+        // Usuário fez logout ou token expirou
+        setUser(null);
+        setIsLoading(false);
+      } else if (event === 'TOKEN_REFRESHED' && session?.user) {
+        // Token foi atualizado - mantém o usuário
+        const user = {
+          id: session.user.id,
+          email: session.user.email || '',
+          name: session.user.user_metadata?.name || session.user.email || '',
+          role: session.user.user_metadata?.role || 'user',
+          firstName: session.user.user_metadata?.firstName,
+          lastName: session.user.user_metadata?.lastName,
+          position: session.user.user_metadata?.position,
+          avatar: session.user.user_metadata?.avatar
+        };
+        setUser(user);
       }
     });
 
     return () => {
+      mounted = false;
       subscription.unsubscribe();
     };
   }, []);
