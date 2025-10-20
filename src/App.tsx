@@ -131,6 +131,31 @@ const SidebarLinks: React.FC = () => {
   );
 };
 
+// Componente de layout compartilhado para rotas protegidas
+const ProtectedLayout: React.FC<{ children: React.ReactNode }> = ({ children }) => (
+  <ProtectedRoute>
+    <div className="min-h-screen bg-background">
+      <CustomSidebar>
+        <CustomSidebarBody className="gap-4">
+          <LogoSection />
+
+          {/* Navigation Links */}
+          <div className="flex-1 px-2">
+            <SidebarLinks />
+          </div>
+        </CustomSidebarBody>
+      </CustomSidebar>
+
+      <div className="md:ml-[60px] transition-all duration-300">
+        <Navigation />
+        <div className="pt-20">
+          {children}
+        </div>
+      </div>
+    </div>
+  </ProtectedRoute>
+);
+
 const App = () => (
   <QueryClientProvider client={queryClient}>
     <TooltipProvider>
@@ -149,43 +174,26 @@ const App = () => (
           {/* Rota de login sem proteção */}
           <Route path="/login" element={<LoginPage />} />
 
-          {/* Todas as outras rotas são protegidas */}
-          <Route path="/" element={
-            <ProtectedRoute>
-              <div className="min-h-screen bg-background">
-                <CustomSidebar>
-                  <CustomSidebarBody className="gap-4">
-                    <LogoSection />
-
-                    {/* Navigation Links */}
-                    <div className="flex-1 px-2">
-                      <SidebarLinks />
-                    </div>
-                  </CustomSidebarBody>
-                </CustomSidebar>
-
-                <div className="md:ml-[60px] transition-all duration-300">
-                  <Navigation />
-                  <div className="pt-20">
-                    <Routes>
-                      <Route path="/" element={<Dashboard />} />
-                      <Route path="/dashboard" element={<Dashboard />} />
-                      <Route path="/analytics" element={<Analytics />} />
-                      <Route path="/tasks" element={<Tasks />} />
-                      <Route path="/editor" element={<DataEditorPage />} />
-                      <Route path="/ranking" element={<RankingPage />} />
-                      <Route path="/profile/:playerId" element={<PlayerProfilePage />} />
-                      <Route path="/profile" element={<PlayerProfilePage />} />
-                      <Route path="/settings" element={<SettingsPage />} />
-                      <Route path="/controle" element={<ProtectedRoute requireRole="manager"><ControlPage /></ProtectedRoute>} />
-                      {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
-                      <Route path="*" element={<NotFound />} />
-                    </Routes>
-                  </div>
-                </div>
-              </div>
-            </ProtectedRoute>
+          {/* Rotas protegidas com layout compartilhado */}
+          <Route path="/" element={<ProtectedLayout><Dashboard /></ProtectedLayout>} />
+          <Route path="/dashboard" element={<ProtectedLayout><Dashboard /></ProtectedLayout>} />
+          <Route path="/analytics" element={<ProtectedLayout><Analytics /></ProtectedLayout>} />
+          <Route path="/tasks" element={<ProtectedLayout><Tasks /></ProtectedLayout>} />
+          <Route path="/editor" element={<ProtectedLayout><DataEditorPage /></ProtectedLayout>} />
+          <Route path="/ranking" element={<ProtectedLayout><RankingPage /></ProtectedLayout>} />
+          <Route path="/profile/:playerId" element={<ProtectedLayout><PlayerProfilePage /></ProtectedLayout>} />
+          <Route path="/profile" element={<ProtectedLayout><PlayerProfilePage /></ProtectedLayout>} />
+          <Route path="/settings" element={<ProtectedLayout><SettingsPage /></ProtectedLayout>} />
+          <Route path="/controle" element={
+            <ProtectedLayout>
+              <ProtectedRoute requireRole="manager">
+                <ControlPage />
+              </ProtectedRoute>
+            </ProtectedLayout>
           } />
+
+          {/* Rota catch-all para 404 */}
+          <Route path="*" element={<ProtectedLayout><NotFound /></ProtectedLayout>} />
         </Routes>
       </BrowserRouter>
         </ErrorBoundary>
